@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSC Business Card Scanner AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f8fafc;
+        }
+        .loader {
+            border: 5px solid #e5e7eb;
+            border-top: 5px solid #3b82f6;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .table-cell {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+        }
+        .table-cell-address {
+             white-space: normal;
+             min-width: 250px;
+        }
+        .modal-backdrop {
+            transition: opacity 0.3s ease;
+        }
+    </style>
+  </head>
+  <body>
+    <div class="w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg">
+        <div class="p-6 md:p-8 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-900">VSC Business Card Scanner AI</h1>
+            <p class="text-gray-500 mt-2">อัปโหลดรูปนามบัตร > AI ช่วยดึงและแยกประเภทข้อมูล > บันทึกลง Google Sheet</p>
+        </div>
+        
+        <div class="p-6 md:p-8">
+            <!-- Upload Area -->
+            <div id="upload-container" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-gray-50 transition-colors">
+                <input type="file" id="image-input" class="hidden" accept="image/*" multiple>
+                <div id="upload-ui">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-600">
+                        <span class="font-semibold text-blue-600">คลิกเพื่ออัปโหลด (เลือกได้หลายไฟล์)</span>
+                    </p>
+                    <p class="text-xs text-gray-500 mt-1">PNG, JPG, GIF (ขนาดไม่เกิน 10MB)</p>
+                </div>
+                <div id="batch-loader" class="hidden flex flex-col items-center justify-center">
+                    <div class="loader"></div>
+                    <p id="batch-loader-text" class="mt-4 text-gray-600"></p>
+                </div>
+            </div>
+             <div id="error-message" class="hidden mt-4 p-4 text-sm text-red-800 rounded-lg bg-red-50" role="alert">
+                <span class="font-medium">เกิดข้อผิดพลาด!</span> <span id="error-text"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results Table and Save Section -->
+    <div id="results-section" class="hidden mt-8 w-full max-w-6xl mx-auto bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">ข้อมูลที่สแกนแล้ว (รอการบันทึก)</h2>
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="w-full text-sm text-left text-gray-600">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th class="table-cell">ชื่อ-นามสกุล</th>
+                        <th class="table-cell">ตำแหน่ง</th>
+                        <th class="table-cell">บริษัท</th>
+                        <th class="table-cell">มือถือ</th>
+                        <th class="table-cell">โทรศัพท์</th>
+                        <th class="table-cell">แฟกซ์</th>
+                        <th class="table-cell">อีเมล</th>
+                        <th class="table-cell">เว็บไซต์</th>
+                        <th class="table-cell table-cell-address">ที่อยู่</th>
+                        <th class="table-cell">ดำเนินการ</th>
+                    </tr>
+                </thead>
+                <tbody id="results-table-body">
+                   <!-- Rows will be added here -->
+                </tbody>
+            </table>
+             <div id="empty-table-message" class="text-center py-8 text-gray-500">
+                ยังไม่มีข้อมูล... เริ่มโดยการสแกนนามบัตร
+            </div>
+        </div>
+
+        <div class="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-800">ขั้นตอนสุดท้าย: บันทึกข้อมูล</h3>
+            <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                 <button id="save-to-sheet-btn" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-green-700 transition-all flex items-center justify-center disabled:bg-gray-400">
+                    <span id="save-btn-text">บันทึกข้อมูลทั้งหมดลง Sheet</span>
+                </button>
+                <button id="clear-all-btn" class="w-full sm:w-auto bg-red-500 text-white font-bold py-2 px-5 rounded-lg hover:bg-red-600 transition-all flex items-center justify-center disabled:bg-gray-400">
+                    ล้างข้อมูลทั้งหมด
+                </button>
+            </div>
+            <div id="save-status" class="mt-3 text-sm"></div>
+        </div>
+    </div>
+
+    <!-- Email Draft Modal -->
+    <div id="email-modal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="email-modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop"></div>
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl m-4 z-10 transform transition-all" id="email-modal-content">
+            <div class="p-6 border-b">
+                <h3 class="text-xl font-semibold text-gray-800">✨ AI ช่วยร่างอีเมลติดตามผล</h3>
+            </div>
+            <div class="p-6">
+                <div id="email-loader" class="text-center py-10">
+                    <div class="loader mx-auto"></div>
+                    <p class="mt-4 text-gray-600">AI กำลังคิด, กรุณารอสักครู่...</p>
+                </div>
+                <div id="email-content" class="hidden">
+                    <textarea id="email-textarea" rows="12" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 rounded-b-lg flex justify-end items-center gap-3">
+                <button id="copy-email-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path></svg>
+                    <span id="copy-email-btn-text">คัดลอก</span>
+                </button>
+                <button id="close-modal-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-all">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // --- DOM Elements ---
+        const uploadContainer = document.getElementById('upload-container');
+        const imageInput = document.getElementById('image-input');
+        const uploadUi = document.getElementById('upload-ui');
+        const batchLoader = document.getElementById('batch-loader');
+        const batchLoaderText = document.getElementById('batch-loader-text');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const resultsSection = document.getElementById('results-section');
+        const resultsTableBody = document.getElementById('results-table-body');
+        const emptyTableMessage = document.getElementById('empty-table-message');
+        const saveToSheetBtn = document.getElementById('save-to-sheet-btn');
+        const clearAllBtn = document.getElementById('clear-all-btn');
+        const saveStatus = document.getElementById('save-status');
+        
+        // Modal elements
+        const emailModal = document.getElementById('email-modal');
+        const emailModalBackdrop = document.getElementById('email-modal-backdrop');
+        const emailModalContent = document.getElementById('email-modal-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const emailLoader = document.getElementById('email-loader');
+        const emailContent = document.getElementById('email-content');
+        const emailTextarea = document.getElementById('email-textarea');
+        const copyEmailBtn = document.getElementById('copy-email-btn');
+        const copyEmailBtnText = document.getElementById('copy-email-btn-text');
+
+
+        // --- State ---
+        let resultsList = [];
+
+        // --- Event Listeners ---
+        uploadContainer.addEventListener('click', () => imageInput.click());
+        imageInput.addEventListener('change', handleImageUpload);
+        saveToSheetBtn.addEventListener('click', handleSaveToSheet);
+        clearAllBtn.addEventListener('click', handleClearAll);
+        closeModalBtn.addEventListener('click', hideEmailModal);
+        emailModalBackdrop.addEventListener('click', hideEmailModal);
+        copyEmailBtn.addEventListener('click', copyEmailToClipboard);
+
+
+        // --- Helper Functions ---
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        // --- Modal Functions ---
+        function showEmailModal() {
+            emailModal.classList.remove('hidden');
+            emailModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                emailModalBackdrop.classList.remove('opacity-0');
+                emailModalContent.classList.remove('opacity-0', 'scale-95');
+            }, 10);
+        }
+
+        function hideEmailModal() {
+            document.body.classList.remove('overflow-hidden');
+            emailModalBackdrop.classList.add('opacity-0');
+            emailModalContent.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+                emailModal.classList.add('hidden');
+                emailModal.classList.remove('flex');
+            }, 300);
+        }
+
+        function copyEmailToClipboard() {
+            emailTextarea.select();
+            document.execCommand('copy');
+            copyEmailBtnText.textContent = 'คัดลอกแล้ว!';
+            setTimeout(() => {
+                copyEmailBtnText.textContent = 'คัดลอก';
+            }, 2000);
+        }
+
+
+        // --- Core Functions ---
+        async function handleImageUpload() {
+            const files = imageInput.files;
+            if (!files.length) return;
+
+            setLoadingState(true, 'scan');
+            const totalFiles = files.length;
+            let processedCount = 0;
+            let newResults = [];
+
+            for (const file of files) {
+                processedCount++;
+                batchLoaderText.textContent = `กำลังสแกนไฟล์ที่ ${processedCount} จาก ${totalFiles}...`;
+                try {
+                    const base64Data = await readFileAsBase64(file);
+                    const prompt = `Analyze the following business card image. Extract the information and return it as a JSON object. The information should be in its original language, whether it is Thai or English.
+- name: The full name of the person.
+- title: The job title.
+- company: The company name.
+- mobile: An array of all mobile phone numbers.
+- phone: An array of all office phone numbers.
+- fax: An array of all fax numbers.
+- email: An array of all email addresses.
+- website: An array of all websites.
+- address: The full address.
+Please be accurate and distinguish between phone, mobile, and fax numbers. If any field is not present, return null or an empty array.`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: file.type, data: base64Data } }] }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    };
+                    
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(`API Error for ${file.name}: ${response.statusText}`);
+                    
+                    const result = await response.json();
+
+                    if (result.candidates?.[0]?.content?.parts?.[0]) {
+                        let jsonText = result.candidates[0].content.parts[0].text;
+                        jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+                        try {
+                            const parsedData = JSON.parse(jsonText);
+                            parsedData.id = Date.now() + processedCount;
+                            newResults.push(parsedData);
+                        } catch (parseError) {
+                             throw new Error(`ไม่สามารถอ่านข้อมูล JSON จากไฟล์ ${file.name} ได้: ${parseError.message}`);
+                        }
+                    } else {
+                        throw new Error(`ไม่สามารถดึงข้อมูลจากไฟล์ ${file.name}`);
+                    }
+                } catch (error) {
+                    showError(error.message);
+                    console.error(error);
+                }
+            }
+            
+            resultsList.push(...newResults);
+            renderResultsTable();
+            setLoadingState(false);
+            showSaveStatus(`สแกนเสร็จสิ้น เพิ่ม ${newResults.length} รายการ`, 'success');
+            imageInput.value = '';
+        }
+
+        function renderResultsTable() {
+            resultsTableBody.innerHTML = '';
+            if (resultsList.length > 0) {
+                resultsSection.classList.remove('hidden');
+                emptyTableMessage.style.display = 'none';
+                saveToSheetBtn.disabled = false;
+                clearAllBtn.disabled = false;
+
+                resultsList.forEach(data => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-50 text-sm';
+                    
+                    const mobileText = (Array.isArray(data.mobile) ? data.mobile.join(', ') : data.mobile) || '-';
+                    const phoneText = (Array.isArray(data.phone) ? data.phone.join(', ') : data.phone) || '-';
+                    const faxText = (Array.isArray(data.fax) ? data.fax.join(', ') : data.fax) || '-';
+                    const emailText = (Array.isArray(data.email) ? data.email.join(', ') : data.email) || '-';
+                    const websiteText = (Array.isArray(data.website) ? data.website.join(', ') : data.website) || '-';
+
+                    tr.innerHTML = `
+                        <td class="table-cell">${data.name || '-'}</td>
+                        <td class="table-cell">${data.title || '-'}</td>
+                        <td class="table-cell">${data.company || '-'}</td>
+                        <td class="table-cell">${mobileText}</td>
+                        <td class="table-cell">${phoneText}</td>
+                        <td class="table-cell">${faxText}</td>
+                        <td class="table-cell">${emailText}</td>
+                        <td class="table-cell">${websiteText}</td>
+                        <td class="table-cell table-cell-address">${data.address || '-'}</td>
+                        <td class="table-cell">
+                            <div class="flex items-center gap-2">
+                                <button class="draft-email-btn text-blue-600 hover:text-blue-800 font-semibold" data-id="${data.id}" title="ร่างอีเมลติดตามผล">
+                                    ✨ ร่างอีเมล
+                                </button>
+                                <button class="delete-row-btn text-red-500 hover:text-red-700" data-id="${data.id}" title="ลบรายการนี้">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tr.querySelector('.delete-row-btn').addEventListener('click', (e) => {
+                        resultsList = resultsList.filter(item => item.id !== Number(e.currentTarget.dataset.id));
+                        renderResultsTable();
+                    });
+                     tr.querySelector('.draft-email-btn').addEventListener('click', (e) => {
+                        const contactId = Number(e.currentTarget.dataset.id);
+                        const contact = resultsList.find(item => item.id === contactId);
+                        draftFollowUpEmail(contact);
+                    });
+                    resultsTableBody.appendChild(tr);
+                });
+            } else {
+                resultsSection.classList.add('hidden');
+                emptyTableMessage.style.display = 'block';
+                saveToSheetBtn.disabled = true;
+                clearAllBtn.disabled = true;
+            }
+        }
+        
+        async function draftFollowUpEmail(contact) {
+            if (!contact) return;
+            
+            showEmailModal();
+            emailLoader.classList.remove('hidden');
+            emailContent.classList.add('hidden');
+            
+            try {
+                const prompt = `You are a professional business assistant. Write a polite and formal follow-up email in Thai.
+The recipient is:
+- Name: คุณ${contact.name || '(ระบุชื่อผู้ติดต่อ)'}
+- Title: ${contact.title || '(ระบุตำแหน่ง)'}
+- Company: ${contact.company || '(ระบุชื่อบริษัท)'}
+
+The purpose of the email is to:
+1.  Briefly re-introduce myself.
+2.  Express pleasure in meeting them.
+3.  Open the door for future business discussions or collaboration.
+
+The email should be concise and professional. Sign off with "[ชื่อของคุณ]" and "[ชื่อบริษัทของคุณ]".`;
+
+                const payload = {
+                  contents: [{ role: "user", parts: [{ text: prompt }] }]
+                };
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`Gemini API Error: ${response.statusText}`);
+
+                const result = await response.json();
+                
+                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const draftedText = result.candidates[0].content.parts[0].text;
+                    emailTextarea.value = draftedText;
+                } else {
+                    throw new Error("ไม่ได้รับเนื้อหาอีเมลจาก AI");
+                }
+
+            } catch (error) {
+                emailTextarea.value = `เกิดข้อผิดพลาดในการร่างอีเมล: ${error.message}`;
+            } finally {
+                emailLoader.classList.add('hidden');
+                emailContent.classList.remove('hidden');
+            }
+        }
+
+        function handleSaveToSheet() {
+            const baseUrl = 'https://script.google.com/a/macros/valuesourcing.co/s/AKfycbwMroQTzwdNb7qEq0aByWy_aCXnKBqg3yqMwEMIitB5GpRieCNTaElfGKkF7BEKbGiR/exec';
+            
+            if (resultsList.length === 0) {
+                showSaveStatus('ไม่มีข้อมูลให้บันทึก', 'error');
+                return;
+            }
+
+            setLoadingState(true, 'save');
+            
+            try {
+                const payload = JSON.stringify(resultsList);
+                const encodedPayload = encodeURIComponent(payload);
+
+                if (encodedPayload.length > 2000) {
+                    showSaveStatus('ข้อมูลมีขนาดใหญ่เกินไป กรุณาลดจำนวนรายการแล้วลองอีกครั้ง', 'error');
+                    setLoadingState(false, 'save');
+                    return;
+                }
+
+                const finalUrl = `${baseUrl}?data=${encodedPayload}`;
+                
+                window.open(finalUrl, '_blank');
+
+                showSaveStatus('กำลังเปิดหน้าต่างใหม่เพื่อบันทึก... กรุณาตรวจสอบผลลัพธ์ในแท็บใหม่', 'success');
+                setTimeout(() => {
+                    resultsList = [];
+                    renderResultsTable();
+                }, 1000);
+
+            } catch (error) {
+                showSaveStatus(`เกิดข้อผิดพลาดในการเตรียมข้อมูล: ${error.message}`, 'error');
+            } finally {
+                setLoadingState(false, 'save');
+            }
+        }
+
+        function handleClearAll() {
+            resultsList = [];
+            renderResultsTable();
+            showSaveStatus('ล้างข้อมูลทั้งหมดแล้ว', 'success');
+        }
+
+        function setLoadingState(isLoading, type) {
+            if (type === 'scan') {
+                uploadUi.classList.toggle('hidden', isLoading);
+                batchLoader.classList.toggle('hidden', !isLoading);
+            } else if (type === 'save') {
+                saveToSheetBtn.disabled = isLoading;
+                document.getElementById('save-btn-text').textContent = isLoading ? 'กำลังบันทึก...' : 'บันทึกข้อมูลทั้งหมดลง Sheet';
+            }
+        }
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+        
+        function showSaveStatus(message, type) {
+            saveStatus.textContent = message;
+            saveStatus.className = 'mt-3 text-sm';
+            if (type === 'success') saveStatus.classList.add('text-green-600');
+            else if (type === 'error') saveStatus.classList.add('text-red-600');
+            else saveStatus.classList.add('text-blue-600');
+            
+            setTimeout(() => { saveStatus.textContent = ''; }, 5000);
+        }
+      });
+    </script>
+  </body>
+</html>
